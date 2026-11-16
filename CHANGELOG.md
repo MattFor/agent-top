@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `install` copies through existing `~/.local/bin` symlinks instead of replacing them with plain files, so a symlinked install keeps updating the file it points at.
+
 ## [0.1.0] - 08:24 CET 16-11-2026
 
 ### Added

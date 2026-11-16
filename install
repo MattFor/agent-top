@@ -2,8 +2,10 @@
 # Installs agent-top and its toggle into ~/.local/bin and binds Super+Z to the popup.
 set -eu
 cd "$(dirname "$0")"
-install -Dm755 agent-top "$HOME/.local/bin/agent-top"
-install -Dm755 agent-top-toggle "$HOME/.local/bin/agent-top-toggle"
+mkdir -p "$HOME/.local/bin"
+# cp writes through the ~/.local/bin symlinks into ~/shared/bin; install(1) would replace them with plain files.
+cp agent-top agent-top-toggle "$HOME/.local/bin/"
+chmod 755 "$HOME/.local/bin/agent-top" "$HOME/.local/bin/agent-top-toggle"
 # xfconfd caches settings, so the binding goes through xfconf-query rather than the XML file.
 key='/commands/custom/<Super>z'
 xfconf-query -c xfce4-keyboard-shortcuts -p "$key" -s "$HOME/.local/bin/agent-top-toggle" 2>/dev/null \

@@ -22,7 +22,7 @@ if [ -z "${mw:-}" ]; then
 fi
 # Keep the popup inside the work area when the panel overlaps its monitor.
 work=$(xprop -root _NET_WORKAREA 2>/dev/null | sed -n 's/.*= *\([0-9, ]*\).*/\1/p' | awk -F, '{gsub(/ /,""); if(NF>=4)print $1,$2,$3,$4}')
-read -r wx wy ww wh <<<"$work"
+read -r _ wy ww wh <<<"$work"
 if [ -n "${ww:-}" ] && [ "$wy" -ge "$my" ] && [ "$((wy + wh))" -lt "$((my + mh))" ]; then
     my=$wy
     mh=$wh

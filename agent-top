@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
-import os, sys, time, json, re, glob, signal, select, termios, tty, urllib.request, urllib.error, sqlite3, datetime, subprocess, threading
+import contextlib
+import os
+import sys
+import time
+import json
+import re
+import glob
+import signal
+import select
+import termios
+import tty
+import urllib.request
+import urllib.error
+import sqlite3
+import datetime
+import subprocess
+import threading
 from pathlib import Path
 
 HOME = Path.home()
@@ -368,7 +384,9 @@ def codex_titles():
 
 
 def codex_limits(rl):
-	win = lambda m: '?' if not m else f'{m // 1440}d' if m % 1440 == 0 else f'{m // 60}h' if m % 60 == 0 else f'{m}m'
+	def win(m):
+		return '?' if not m else f'{m // 1440}d' if m % 1440 == 0 else f'{m // 60}h' if m % 60 == 0 else f'{m}m'
+
 	items = [
 		(win(w.get('window_minutes')), w['used_percent'], w.get('resets_at'))
 		for w in (rl.get('primary'), rl.get('secondary'))
@@ -389,18 +407,21 @@ def codex_limits(rl):
 
 def claude_limits(u):
 	items = []
-	for l in u.get('limits') or []:
-		if l.get('percent') is None:
+	for lim in u.get('limits') or []:
+		if lim.get('percent') is None:
 			continue
-		g = {'session': '5h', 'weekly': '7d'}.get(l.get('group'), l.get('group') or '?')
-		m = ((l.get('scope') or {}).get('model') or {}).get('display_name')
-		items.append((f'{m.lower()} {g}' if m else g, l['percent'], iso_epoch(l.get('resets_at'))))
+		g = {'session': '5h', 'weekly': '7d'}.get(lim.get('group'), lim.get('group') or '?')
+		m = ((lim.get('scope') or {}).get('model') or {}).get('display_name')
+		items.append((f'{m.lower()} {g}' if m else g, lim['percent'], iso_epoch(lim.get('resets_at'))))
 	s = u.get('spend') or {}
-	money = lambda m: (
-		f"{m['amount_minor'] / 10 ** m.get('exponent', 2):.{m.get('exponent', 2)}f}"
-		if isinstance(m, dict) and m.get('amount_minor') is not None
-		else None
-	)
+
+	def money(m):
+		return (
+			f"{m['amount_minor'] / 10 ** m.get('exponent', 2):.{m.get('exponent', 2)}f}"
+			if isinstance(m, dict) and m.get('amount_minor') is not None
+			else None
+		)
+
 	used, cap, cur = money(s.get('used')), money(s.get('limit')), (s.get('used') or {}).get('currency', '')
 	return items, [f'extra {used}/{cap} {cur}'.rstrip() if cap else f'extra {used} {cur}'.rstrip()] if s.get(
 		'enabled'
@@ -443,7 +464,11 @@ def claude_fetch():
 def copilot_fetch():
 	try:
 		r = subprocess.run(
-			['gh', 'api', '/copilot_internal/user'], stdin=subprocess.DEVNULL, capture_output=True, timeout=5
+			['gh', 'api', '/copilot_internal/user'],
+			stdin=subprocess.DEVNULL,
+			capture_output=True,
+			timeout=5,
+			check=False,
 		)
 		return copilot_limits(json.loads(r.stdout)) if r.returncode == 0 else None
 	except Exception:
@@ -749,10 +774,9 @@ def activity(a):
 
 
 def scan(sync=False):
-	global LIVE
+	global LIVE  # noqa: PLW0603 rebinding is atomic for the limits thread; clear+update is not
 	table = read_proc_table()
 	stamp = time.monotonic()
-	now = time.time()
 	agents = live_claude(table) + live_codex(table) + live_misc(table)
 	copilot_usage(agents)
 	for a in agents:
@@ -767,13 +791,16 @@ def scan(sync=False):
 		key=lambda a: a['since'],
 	)
 	local = local_lines() if runners else []
-	lrow = lambda m, indent: {
-		'state': 'work',
-		'letter': 'L',
-		'indent': indent,
-		'name': m['text'],
-		'since': runners[0]['since'] if len(runners) == 1 else None,
-	}
+
+	def lrow(m, indent):
+		return {
+			'state': 'work',
+			'letter': 'L',
+			'indent': indent,
+			'name': m['text'],
+			'since': runners[0]['since'] if len(runners) == 1 else None,
+		}
+
 	claimed = {}
 	for m in local:
 		owner = next((a for a in agents if a['model'] == m['name'] and not a.get('misc')), None)
@@ -970,7 +997,7 @@ def render(data, width, height=None, colored=True, sel=None, owners=None):
 	if height:
 		room = max(0, height - len(foot))
 		if len(body) > room > 1:
-			body = body[: room - 1] + [f'{d}… {len(body) - room + 1} more lines (t a i hide detail){z}']
+			body = [*body[: room - 1], f'{d}… {len(body) - room + 1} more lines (t a i hide detail){z}']
 			own = own[: room - 1]
 		body += [''] * (room - len(body))
 	if owners is not None:
@@ -980,7 +1007,9 @@ def render(data, width, height=None, colored=True, sel=None, owners=None):
 
 def run(*cmd):
 	try:
-		return subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=3).stdout
+		return subprocess.run(
+			cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=3, check=False
+		).stdout
 	except Exception:
 		return ''
 
@@ -1007,8 +1036,8 @@ def jump(pid):
 		(
 			f
 			for f in (
-				l.split()
-				for l in run('tmux', 'list-panes', '-a', '-F', '#{pane_id} #{pane_tty} #{session_name}').splitlines()
+				ln.split()
+				for ln in run('tmux', 'list-panes', '-a', '-F', '#{pane_id} #{pane_tty} #{session_name}').splitlines()
 			)
 			if tty_path and f[1:2] == [tty_path]
 		),
@@ -1018,12 +1047,15 @@ def jump(pid):
 		clients = [
 			f
 			for f in (
-				l.split()
-				for l in run('tmux', 'list-clients', '-F', '#{client_tty} #{client_pid} #{session_name}').splitlines()
+				ln.split()
+				for ln in run('tmux', 'list-clients', '-F', '#{client_tty} #{client_pid} #{session_name}').splitlines()
 			)
 			if len(f) == 3 and f[0].startswith('/dev/')
 		]
-		dropdown = lambda c: any('--drop-down' in procargs(p) for p in ancestors(int(c[1])))
+
+		def dropdown(c):
+			return any('--drop-down' in procargs(p) for p in ancestors(int(c[1])))
+
 		c = (
 			next((c for c in clients if c[2] == pane[2]), None)
 			or next((c for c in clients if dropdown(c)), None)
@@ -1050,7 +1082,7 @@ def jump(pid):
 		target = int(c[1])
 		session = pane[2]
 	wins = {}
-	for f in (l.split() for l in run('wmctrl', '-lp').splitlines()):
+	for f in (ln.split() for ln in run('wmctrl', '-lp').splitlines()):
 		if len(f) > 2:
 			wins.setdefault(f[2], f[0])
 	for p in ancestors(target):
@@ -1128,18 +1160,27 @@ def selftest():
 	)
 	import tempfile
 
-	J = lambda d: json.dumps(d) + '\n'
+	def J(d):
+		return json.dumps(d) + '\n'
+
 	with tempfile.TemporaryDirectory() as td:
 		p = Path(td) / 'x.jsonl'
-		line = lambda ident, n: (
-			json.dumps(
-				{
-					'type': 'assistant',
-					'message': {'id': ident, 'model': 'claude-test', 'usage': {'input_tokens': n, 'output_tokens': 2}},
-				}
+
+		def line(ident, n):
+			return (
+				json.dumps(
+					{
+						'type': 'assistant',
+						'message': {
+							'id': ident,
+							'model': 'claude-test',
+							'usage': {'input_tokens': n, 'output_tokens': 2},
+						},
+					}
+				)
+				+ '\n'
 			)
-			+ '\n'
-		)
+
 		p.write_text(line('a', 3))
 		assert token_sum(p)['in'] == 3
 		with p.open('a') as f:
@@ -1264,8 +1305,8 @@ def selftest():
 			J({'type': 'turn_context', 'payload': {'model': 'gpt-6-luna', 'effort': 'xhigh'}})
 			+ J({'type': 'event_msg', 'payload': {'type': 'token_count', 'info': None, 'rate_limits': rl}})
 		)
-		_, _, m, e, l, _ = rollout_tokens(q2)
-		assert (m, e, l) == ('gpt-6-luna', 'xhigh', rl)
+		_, _, m, e, lim, _ = rollout_tokens(q2)
+		assert (m, e, lim) == ('gpt-6-luna', 'xhigh', rl)
 		with q2.open('a') as f:
 			f.write(
 				J({'type': 'turn_context', 'payload': {'model': 'gpt-6-luna', 'reasoning_effort': 'low'}})
@@ -1309,7 +1350,7 @@ def selftest():
 		TOUCHED.clear()
 		running = claude_subagents(project, 'dead')
 		assert len(running) == 1 and running[0]['type'] == 'Explore' and running[0]['tok']['in'] == 5
-		assert TOUCHED == {str(fresh)}, 'finished and stale subagents must not be parsed'
+		assert {str(fresh)} == TOUCHED, 'finished and stale subagents must not be parsed'
 	u = {
 		'limits': [
 			{'group': 'session', 'percent': 34, 'resets_at': '2026-01-01T01:00:00+00:00', 'scope': None},
@@ -1395,7 +1436,7 @@ def selftest():
 	VIEW.clear()
 	VIEW.update(saved)
 	real = procargs
-	globals()['procargs'] = lambda pid: [
+	globals()['procargs'] = lambda _pid: [
 		'/h/.local/bin/agent',
 		'--use-system-ca',
 		'/h/.local/share/cursor-agent/versions/1/index.js',
@@ -1408,18 +1449,20 @@ def selftest():
 		globals()['procargs'] = real
 
 
-def fit(cols, rows, size):
+def fit(cols, rows):
 	wid = os.environ.get('WINDOWID')
 	try:
 		hints = subprocess.run(
-			['xprop', '-id', wid, 'WM_NORMAL_HINTS'], capture_output=True, text=True, timeout=2
+			['xprop', '-id', wid, 'WM_NORMAL_HINTS'], capture_output=True, text=True, timeout=2, check=False
 		).stdout
 		inc = re.search(r'resize increment: (\d+) by (\d+)', hints)
 		base = re.search(r'base size: (\d+) by (\d+)', hints)
 		bw, bh = map(int, base.groups()) if base else (0, 0)
 		cw, ch = map(int, inc.groups())
 		# exact cell multiples: xfwm4 anchors on the requested size, then snaps, so any slack drifts the corner
-		subprocess.run(['wmctrl', '-i', '-r', wid, '-e', f'9,-1,-1,{bw + cols * cw},{bh + rows * ch}'], timeout=2)
+		subprocess.run(
+			['wmctrl', '-i', '-r', wid, '-e', f'9,-1,-1,{bw + cols * cw},{bh + rows * ch}'], timeout=2, check=False
+		)
 	except Exception:
 		pass
 
@@ -1447,10 +1490,8 @@ def main():
 		VIEW.update(limits=True, help=True)
 		print(render(scan(sync=True), w, None, colored))
 		return 0
-	try:
+	with contextlib.suppress(Exception):
 		VIEW.update({k: bool(v) for k, v in json.loads(CONFIG.read_text()).items() if k in VIEW})
-	except Exception:
-		pass
 	if VIEW['limits']:
 		SHOW_LIMITS.set()
 	fd = sys.stdin.fileno()
@@ -1494,7 +1535,7 @@ def main():
 				target = (min(110, max(40, max(visible_len(x) for x in full) + 1)), min(50, len(full)))
 				if target != want and target != (size.columns, size.lines):
 					want = target
-					threading.Thread(target=fit, args=(*target, size), daemon=True).start()
+					threading.Thread(target=fit, args=target, daemon=True).start()
 			out = render(data, size.columns, size.lines, colored, sel, owners)
 			if out != prev:
 				# no trailing newline: writing past the last row would scroll the screen
@@ -1507,8 +1548,9 @@ def main():
 			keys = os.read(fd, 64)
 			if not keys:
 				break  # tty gone; select would spin
-			for k in re.findall(rb'\x1b\[<[0-9;]*[Mm]|\x1b\[[0-9;]*[A-Za-z~]|\x1bO.|.', keys, re.S):
-				if mouse := re.fullmatch(rb'\x1b\[<(\d+);\d+;(\d+)M', k):
+			for raw in re.findall(rb'\x1b\[<[0-9;]*[Mm]|\x1b\[[0-9;]*[A-Za-z~]|\x1bO.|.', keys, re.DOTALL):
+				k = raw
+				if mouse := re.fullmatch(rb'\x1b\[<(\d+);\d+;(\d+)M', raw):
 					button, line = int(mouse[1]), int(mouse[2]) - 1
 					if button in (64, 65):
 						k = up[0] if button == 64 else down[0]
@@ -1539,10 +1581,8 @@ def main():
 		pass
 	finally:
 		if old is not None:
-			try:
+			with contextlib.suppress(OSError):
 				termios.tcsetattr(fd, termios.TCSADRAIN, old)
-			except OSError:
-				pass
 		sys.stdout.write('\033[?1000l\033[?1006l\033[?25h\033[?1049l')
 		sys.stdout.flush()
 	return 0

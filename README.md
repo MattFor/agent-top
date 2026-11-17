@@ -25,17 +25,17 @@ Super+Z shows or hides the popup. `agent-top --once` prints one snapshot, `--no-
 
 ### Keys
 
-| Key | Action |
-|---|---|
-| t | topic instead of the session name |
-| m | model and effort |
-| c | run time |
-| a | current tool call |
-| i | tokens |
-| s | plan limits |
-| ? | key help |
-| ↑↓ / j k / wheel | select |
-| Enter / click | jump to the session |
+| Key              | Action                            |
+| ---------------- | --------------------------------- |
+| t                | topic instead of the session name |
+| m                | model and effort                  |
+| c                | run time                          |
+| a                | current tool call                 |
+| i                | tokens                            |
+| s                | plan limits                       |
+| ?                | key help                          |
+| ↑↓ / j k / wheel | select                            |
+| Enter / click    | jump to the session               |
 
 Toggles persist in `~/.config/agent-top/config.json`.
 

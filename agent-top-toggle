@@ -15,25 +15,36 @@ state="${XDG_STATE_HOME:-$HOME/.local/state}/agent-top"
 mkdir -p "$state"
 eval "$(xdotool getmouselocation --shell 2>/dev/null)"
 read -r mx my mw mh < <(xrandr --listactivemonitors 2>/dev/null | awk -v x="${X:-0}" -v y="${Y:-0}" 'NR>1 { split($3,g,/[\/x+]/); if(x>=g[5]&&x<g[5]+g[1]&&y>=g[6]&&y<g[6]+g[3]){print g[5],g[6],g[1],g[3];exit} }')
-if [ -z "${mw:-}" ]; then read -r mw mh < <(xdotool getdisplaygeometry); mx=0; my=0; fi
+if [ -z "${mw:-}" ]; then
+    read -r mw mh < <(xdotool getdisplaygeometry)
+    mx=0
+    my=0
+fi
 # Keep the popup inside the work area when the panel overlaps its monitor.
 work=$(xprop -root _NET_WORKAREA 2>/dev/null | sed -n 's/.*= *\([0-9, ]*\).*/\1/p' | awk -F, '{gsub(/ /,""); if(NF>=4)print $1,$2,$3,$4}')
-read -r wx wy ww wh <<< "$work"
-if [ -n "${ww:-}" ] && [ "$wy" -ge "$my" ] && [ "$((wy+wh))" -lt "$((my+mh))" ]; then my=$wy; mh=$wh; fi
+read -r wx wy ww wh <<<"$work"
+if [ -n "${ww:-}" ] && [ "$wy" -ge "$my" ] && [ "$((wy + wh))" -lt "$((my + mh))" ]; then
+    my=$wy
+    mh=$wh
+fi
 size_file="$state/popup-size"
 geometry=64x22
 # Cached outer size + frame extents, so the window maps in the corner (xfwm4 offsets --geometry by the extents).
-read -r fw fh cl ct 2>/dev/null < "$size_file" && geometry+="+$((mx+mw-fw-12-${cl:-0}))+$((my+mh-fh-12-${ct:-0}))"
+read -r fw fh cl ct 2>/dev/null <"$size_file" && geometry+="+$((mx + mw - fw - 12 - ${cl:-0}))+$((my + mh - fh - 12 - ${ct:-0}))"
 setsid -f xfce4-terminal --disable-server --title="$title" --hide-menubar --hide-toolbar --hide-scrollbar --geometry="$geometry" -x "$HOME/.local/bin/agent-top" --fit
-for _ in $(seq 40); do id=$(find_window); [ -n "$id" ] && break; sleep 0.05; done
+for _ in $(seq 40); do
+    id=$(find_window)
+    [ -n "$id" ] && break
+    sleep 0.05
+done
 [ -n "${id:-}" ] || exit 0
 # Super+Z is the only way in, so keep it off the taskbar and pager.
 wmctrl -i -r "$id" -b add,skip_taskbar,skip_pager
 read -r width height < <(xdotool getwindowgeometry --shell "$((id))" | awk -F= '$1=="WIDTH"||$1=="HEIGHT"{printf "%s ",$2}')
 read -r left right top bottom < <(xprop -id "$id" _NET_FRAME_EXTENTS 2>/dev/null | awk -F' = ' 'NF==2{gsub(/,/,"",$2);print $2}')
-size="$((width+${left:-0}+${right:-0})) $((height+${top:-0}+${bottom:-0})) ${left:-0} ${top:-0}"
+size="$((width + ${left:-0} + ${right:-0})) $((height + ${top:-0} + ${bottom:-0})) ${left:-0} ${top:-0}"
 [ "$size" = "${fw:-} ${fh:-} ${cl:-} ${ct:-}" ] && exit 0
-printf '%s\n' "$size" > "$size_file"
-read -r fw fh cl ct <<< "$size"
+printf '%s\n' "$size" >"$size_file"
+read -r fw fh cl ct <<<"$size"
 # xdotool adds the frame extents itself, so subtract them to land the frame in the corner.
-xdotool windowmove "$((id))" "$((mx+mw-fw-12-${left:-0}))" "$((my+mh-fh-12-${top:-0}))"
+xdotool windowmove "$((id))" "$((mx + mw - fw - 12 - ${left:-0}))" "$((my + mh - fh - 12 - ${top:-0}))"

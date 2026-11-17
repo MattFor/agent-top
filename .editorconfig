@@ -20,5 +20,5 @@ indent_size = 2
 [*.md]
 trim_trailing_whitespace = false
 
-[moodle-mcp]
+[agent-top]
 indent_style = tab

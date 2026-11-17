@@ -3,7 +3,7 @@
 set -eu
 cd "$(dirname "$0")"
 mkdir -p "$HOME/.local/bin"
-# cp writes through the ~/.local/bin symlinks into ~/shared/bin; install(1) would replace them with plain files.
+# cp writes through existing symlinks; install(1) would replace them with plain files.
 cp agent-top agent-top-toggle "$HOME/.local/bin/"
 chmod 755 "$HOME/.local/bin/agent-top" "$HOME/.local/bin/agent-top-toggle"
 # xfconfd caches settings, so the binding goes through xfconf-query rather than the XML file.

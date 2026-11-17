@@ -1,6 +1,8 @@
 # Agent Top
 
-[![License: proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
+[![CI](https://github.com/MattFor/agent-top/actions/workflows/ci.yml/badge.svg)](https://github.com/MattFor/agent-top/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/MattFor/agent-top)](https://github.com/MattFor/agent-top/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A Super+Z popup listing the Claude Code, Codex, Copilot and local model sessions open right now.
 
@@ -13,7 +15,7 @@ A Super+Z popup listing the Claude Code, Codex, Copilot and local model sessions
 
 ## Requirements
 
-Python 3 (stdlib only), XFCE with xfce4-terminal, `wmctrl`, `xdotool`, `xprop`, `xrandr`.
+Python 3.11+ (stdlib only), XFCE with xfce4-terminal, `wmctrl`, `xdotool`, `xprop`, `xrandr`.
 
 ## Install
 
@@ -41,4 +43,4 @@ Toggles persist in `~/.config/agent-top/config.json`.
 
 ## License
 
-Proprietary, see [LICENSE](LICENSE). By [MattFor](https://github.com/MattFor).
+MIT, see [LICENSE](LICENSE). By [MattFor](https://github.com/MattFor).
